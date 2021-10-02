@@ -160,17 +160,17 @@ class IpTcpParser:
 # so it would be easy to detect the source of a TCP connect() scan.
 def connect_scan(port):
     with socket(AF_INET, SOCK_STREAM) as s:
-        try:
-            s.connect((dst_ip, port))
+        with scan_lock:
             try:
-                service = services[str(port)]
-            except:
-                service = '----'
-            with print_lock:
+                s.connect((dst_ip, port))
+                try:
+                    service = services[str(port)]
+                except:
+                    service = '----'
                 print('{:<8} {:<15} {:<10}'.format(str(port), service, 'open'))
-                # time.sleep(processing_delay)
-        except:
-            pass  # the remote system is offline, the port is closed, or some other error occurred along the way
+                time.sleep(processing_delay)
+            except:
+                pass  # the remote system is offline, the port is closed, or some other error occurred along the way
 
 
 def ack_syn_fin_window_scan(port):
@@ -180,9 +180,10 @@ def ack_syn_fin_window_scan(port):
         # now start constructing the packet
         myscan = IpTcpAssembler(src_ip, dst_ip, port, scan_method)
 
-        # Send the packet finally - the port specified has no effect
-        s.sendto(myscan.packet, (dst_ip, port))  # put this in a loop if you want to flood the target
-        time.sleep(processing_delay)
+        with scan_lock:
+            # Send the packet finally - the port specified has no effect
+            s.sendto(myscan.packet, (dst_ip, port))  # put this in a loop if you want to flood the target
+            time.sleep(processing_delay)
 
 
 # The threader thread pulls an worker_send from the queue and processes it
@@ -273,7 +274,7 @@ if __name__ == '__main__':
     # this is used so while one thread is using a variable, others cannot access
     # it. Once done, the thread releases the print_lock.
     # to use it, you want to specify a print_lock per thing you wish to print_lock.
-    print_lock = threading.Lock()
+    scan_lock = threading.Lock()
 
     if scan_method != 1:
         all_ports = [x for x in range(port_range_min, port_range_max+1)]
